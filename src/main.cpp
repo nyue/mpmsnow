@@ -17,6 +17,8 @@
 #include "MpmSim/SnowConstitutiveModel.h"
 #include "MpmSim/ConjugateResiduals.h"
 
+#include "MpmSim/CollisionObject.h"
+
 using namespace Eigen;
 using namespace MpmSim;
 
@@ -56,8 +58,8 @@ SnowConstitutiveModel g_snowModel(
 );
 
 // collision objects:
-Sim::CollisionObjectSet g_collisionObjects;
-Sim::ForceFieldSet g_fields;
+MpmSim::CollisionObject::CollisionObjectSet g_collisionObjects;
+MpmSim::ForceField::ForceFieldSet g_fields;
 
 int g_time(0);
 
@@ -72,10 +74,10 @@ int main(int argc, char** argv)
 	Eigen::Vector4f plane( 0, 1, 0, 0.5f );
 	Eigen::Vector4f plane2( 0, -1, 0, -1.5f );
 	Eigen::Vector3f gravity( 0, -9.8, 0 );
-	g_collisionObjects.objects.push_back( new CollisionPlane( plane, 0.7f, true ) );
+	g_collisionObjects.add( new CollisionPlane( plane, 0.7f, true ) );
 	//g_collisionObjects.objects.push_back( new CollisionPlane( plane2, 0.7f, true ) );
 	//((CollisionPlane*)g_collisionObjects.objects.back())->setV( Eigen::Vector3f(0,-1,0) );
-	g_fields.fields.push_back( new GravityField( gravity ) );
+	g_fields.add( new GravityField( gravity ) );
 	
 	// initial configuration:
 	float particleSpacing = 0.5f * g_gridSize;
@@ -257,9 +259,9 @@ void display()
 	g_sim->advance( g_timeStep, t );
 	glDisable( GL_DEPTH_TEST );
 
-	const std::vector<Eigen::Vector3f>& particleX = g_sim->particleData.variable<Eigen::Vector3f>( "p" );
-	const std::vector<Eigen::Matrix3f>& F = g_sim->particleData.variable<Eigen::Matrix3f>( "F" );
-	const std::vector<float>& volume = g_sim->particleData.variable<float>( "volume" );
+	const std::vector<Eigen::Vector3f>& particleX = g_sim->particleData().variable<Eigen::Vector3f>( "p" );
+	const std::vector<Eigen::Matrix3f>& F = g_sim->particleData().variable<Eigen::Matrix3f>( "F" );
+	const std::vector<float>& volume = g_sim->particleData().variable<float>( "volume" );
 	
 	for( size_t p = 0; p < particleX.size(); ++p )
 	{

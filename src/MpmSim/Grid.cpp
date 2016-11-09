@@ -19,9 +19,10 @@ class Grid::GridSplatter
 		GridSplatter(
 			const Grid& g,
 			Eigen::VectorXf& result
-		) :
-			m_g( g ),
-			m_result( result )
+		) : m_g( g )
+		, m_result( result )
+	, m_partition(0)
+	, m_args(0)
 		{
 		}
 		
@@ -724,125 +725,99 @@ void Grid::collisionVelocities(
 }
 
 // procedural matrix class for solving the implicit update linear system in Grid::updateGridVelocities()
-class Grid::ImplicitUpdateMatrix : public ProceduralMatrix
+
+Grid::ImplicitUpdateMatrix::ImplicitUpdateMatrix(const MaterialPointData& d,
+												 const Grid& g,
+												 const ConstitutiveModel& constitutiveModel,
+												 const CollisionObject::CollisionObjectSet& collisionObjects,
+												 const ForceField::ForceFieldSet& fields,
+												 float timeStep)
+: m_d( d )
+, m_g(g)
+, m_constitutiveModel( constitutiveModel )
+, m_collisionObjects( collisionObjects )
+, m_fields( fields )
+, m_timeStep( timeStep )
 {
+}
 
-public:
+void Grid::ImplicitUpdateMatrix::multVector( const Eigen::VectorXf& vNPlusOne, Eigen::VectorXf& result ) const
+{
+	// This method computes the forward momenta in this frame in terms of the velocities
+	// in the next frame:
+	// m * v^(n+1) - m_timeStep * dF(v^(n+1) * m_timeStep)
 
-	Grid::ImplicitUpdateMatrix(
-		const MaterialPointData& d,
-		const Grid& g,
-		const ConstitutiveModel& constitutiveModel,
-		const CollisionObject::CollisionObjectSet& collisionObjects,
-		const ForceField::ForceFieldSet& fields,
-		float timeStep
-	) :
-		m_d( d ),
-		m_g(g),
-		m_constitutiveModel( constitutiveModel ),
-		m_collisionObjects( collisionObjects ),
-		m_fields( fields ),
-		m_timeStep( timeStep )
+	// apply collisions to input:
+	result = vNPlusOne;
+	subspaceProject( result );
+
+	// work out force differentials when you perturb the grid positions by vTransformed * m_timeStep:
+	VectorXf df( result.size() );
+	m_g.calculateForceDifferentials( df, result, m_constitutiveModel, m_fields );
+
+	// convert result to a momentum, and subtract off df multiplied by the time step:
+	for( int idx=0; idx < m_g.m_masses.size(); ++idx )
 	{
+		result.segment<3>( 3*idx ) = m_g.m_masses[ idx ] * result.segment<3>( 3 * idx ) - m_timeStep * m_timeStep * df.segment<3>( 3 * idx );
 	}
-	
-	virtual void multVector( const Eigen::VectorXf& vNPlusOne, Eigen::VectorXf& result ) const
-	{
-		// This method computes the forward momenta in this frame in terms of the velocities
-		// in the next frame:
-		// m * v^(n+1) - m_timeStep * dF(v^(n+1) * m_timeStep)
-		
-		// apply collisions to input:
-		result = vNPlusOne;
-		subspaceProject( result );
 
-		// work out force differentials when you perturb the grid positions by vTransformed * m_timeStep:
-		VectorXf df( result.size() );
-		m_g.calculateForceDifferentials( df, result, m_constitutiveModel, m_fields );
-		
-		// convert result to a momentum, and subtract off df multiplied by the time step:
-		for( int idx=0; idx < m_g.m_masses.size(); ++idx )
+	// apply collisions to output:
+	subspaceProject( result );
+}
+
+void Grid::ImplicitUpdateMatrix::multInverseVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const
+{
+	// not implemented
+}
+
+void Grid::ImplicitUpdateMatrix::subspaceProject( Eigen::VectorXf& toProject ) const
+{
+	for( int i=0; i < m_g.m_n[0]; ++i )
+	{
+		for( int j=0; j < m_g.m_n[1]; ++j )
 		{
-			result.segment<3>( 3*idx ) = m_g.m_masses[ idx ] * result.segment<3>( 3 * idx ) - m_timeStep * m_timeStep * df.segment<3>( 3 * idx );
-		}
-
-		// apply collisions to output:
-		subspaceProject( result );
-	}
-
-	virtual void multInverseVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const
-	{
-		// not implemented
-	}
-	
-	void subspaceProject( Eigen::VectorXf& toProject ) const
-	{
-		for( int i=0; i < m_g.m_n[0]; ++i )
-		{
-			for( int j=0; j < m_g.m_n[1]; ++j )
+			for( int k=0; k < m_g.m_n[2]; ++k )
 			{
-				for( int k=0; k < m_g.m_n[2]; ++k )
+				int idx = m_g.coordsToIndex( i, j, k );
+				int objIdx = m_g.m_nodeCollided[idx];
+				if( objIdx == -1 )
 				{
-					int idx = m_g.coordsToIndex( i, j, k );
-					int objIdx = m_g.m_nodeCollided[idx];
-					if( objIdx == -1 )
-					{
-						// no collision
-						continue;
-					}
-					else if( objIdx == -2 )
-					{
-						// more than one collision: set to zero
-						toProject.segment<3>( 3 * idx ).setZero();
-					}
-					else
-					{
-						const CollisionObject* obj = m_collisionObjects.object( objIdx );
-						Vector3f v = toProject.segment<3>( 3 * idx );
-						
-						// find object normal:
-						Vector3f x( m_g.m_gridSize * i + m_g.m_min[0], m_g.m_gridSize * j + m_g.m_min[1], m_g.m_gridSize * k + m_g.m_min[2] );
-						Vector3f n;
-						obj->grad( x, n );
-						n.normalize();
-						float nDotP = n.dot( v );
-						
-						// project out component perpendicular to the object
-						v -= nDotP * n;
-						toProject.segment<3>( 3 * idx ) = v;
-					}
-					
+					// no collision
+					continue;
 				}
+				else if( objIdx == -2 )
+				{
+					// more than one collision: set to zero
+					toProject.segment<3>( 3 * idx ).setZero();
+				}
+				else
+				{
+					const CollisionObject* obj = m_collisionObjects.object( objIdx );
+					Vector3f v = toProject.segment<3>( 3 * idx );
+
+					// find object normal:
+					Vector3f x( m_g.m_gridSize * i + m_g.m_min[0], m_g.m_gridSize * j + m_g.m_min[1], m_g.m_gridSize * k + m_g.m_min[2] );
+					Vector3f n;
+					obj->grad( x, n );
+					n.normalize();
+					float nDotP = n.dot( v );
+
+					// project out component perpendicular to the object
+					v -= nDotP * n;
+					toProject.segment<3>( 3 * idx ) = v;
+				}
+
 			}
 		}
 	}
-	
-private:
-	
-	const MaterialPointData& m_d;
-	const Grid& m_g;
-	const ConstitutiveModel& m_constitutiveModel;
-	const CollisionObject::CollisionObjectSet& m_collisionObjects;
-	const ForceField::ForceFieldSet& m_fields;
-	float m_timeStep;
-
-	typedef std::vector< const CollisionObject* >::const_iterator CollisionIterator;
-	typedef std::vector< const CollisionObject* >::const_reverse_iterator ReverseCollisionIterator;
-
-};
+}
 
 // computes the diagonal of an ImplicitUpdateMatrix and applies it to a vector as a diagonal
 // matrix. I'm using this to try and make the solve converge quicker.
-class Grid::DiagonalPreconditioner : public ProceduralMatrix
-{
 
-public:
-
-	DiagonalPreconditioner(
-		const Grid& g,
-		const ConstitutiveModel& constitutiveModel,
-		float timeStep
-	)
+Grid::DiagonalPreconditioner::DiagonalPreconditioner(const Grid& g,
+												     const ConstitutiveModel& constitutiveModel,
+													 float timeStep)
 	{
 		g.dForceidXi( m_implicitUpdateDiagonal, constitutiveModel );
 		m_implicitUpdateDiagonal *= - timeStep * timeStep;
@@ -866,25 +841,21 @@ public:
 		}
 	}
 	
-	virtual void multVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const
+	void Grid::DiagonalPreconditioner::multVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const
 	{
 		result = x.cwiseProduct( m_implicitUpdateDiagonal );
 	}
 	
-	virtual void multInverseVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const
+	void Grid::DiagonalPreconditioner::multInverseVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const
 	{
 		result = x.cwiseQuotient( m_implicitUpdateDiagonal );
 	}
 	
-	void subspaceProject( Eigen::VectorXf& x ) const
+	void Grid::DiagonalPreconditioner::subspaceProject( Eigen::VectorXf& x ) const
 	{
 		// not implemented
 	}
 	
-private:
-	Eigen::VectorXf m_implicitUpdateDiagonal;
-};
-
 
 void Grid::updateGridVelocities(
 	float timeStep,
@@ -1091,9 +1062,10 @@ int Grid::coordsToIndex( int i, int j, int k ) const
 
 
 
-Grid::ShapeFunctionIterator::ShapeFunctionIterator( const Grid& g ) :
-	m_grid( g ),
-	m_diameter( 2 * g.m_shapeFunction.supportRadius() )
+Grid::ShapeFunctionIterator::ShapeFunctionIterator( const Grid& g )
+: m_grid( g )
+, m_diameter( 2 * g.m_shapeFunction.supportRadius() )
+, m_gradients(false)
 {
 	for( int dim=0; dim < 3; ++dim )
 	{

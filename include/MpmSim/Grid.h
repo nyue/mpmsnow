@@ -56,8 +56,56 @@ public:
 private:
 	
 	// classes used by updateGridVelocities() in the implicit velocity solve:
-	class ImplicitUpdateMatrix;
-	class DiagonalPreconditioner;
+	class ImplicitUpdateMatrix : public ProceduralMatrix
+	{
+	public:
+		ImplicitUpdateMatrix(const MaterialPointData& d,
+							 const Grid& g,
+							 const ConstitutiveModel& constitutiveModel,
+							 const CollisionObject::CollisionObjectSet& collisionObjects,
+							 const ForceField::ForceFieldSet& fields,
+							 float timeStep);
+
+		virtual void multVector( const Eigen::VectorXf& vNPlusOne, Eigen::VectorXf& result ) const;
+
+		virtual void multInverseVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const;
+
+		void subspaceProject( Eigen::VectorXf& toProject ) const;
+
+	private:
+
+		const MaterialPointData& m_d;
+		const Grid& m_g;
+		const ConstitutiveModel& m_constitutiveModel;
+		const CollisionObject::CollisionObjectSet& m_collisionObjects;
+		const ForceField::ForceFieldSet& m_fields;
+		float m_timeStep;
+
+		typedef std::vector< const CollisionObject* >::const_iterator CollisionIterator;
+		typedef std::vector< const CollisionObject* >::const_reverse_iterator ReverseCollisionIterator;
+
+
+
+
+	};
+
+	// =====================================================================
+	class DiagonalPreconditioner : public ProceduralMatrix
+	{
+	public:
+		DiagonalPreconditioner(const Grid& g,const ConstitutiveModel& constitutiveModel,
+				float timeStep);
+
+		virtual void multVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const;
+
+		virtual void multInverseVector( const Eigen::VectorXf& x, Eigen::VectorXf& result ) const;
+
+		void subspaceProject( Eigen::VectorXf& x ) const;
+
+	private:
+		Eigen::VectorXf m_implicitUpdateDiagonal;
+
+	};
 
 	// map grid coordinates to cell index:
 	int coordsToIndex( int i, int j, int k ) const;
