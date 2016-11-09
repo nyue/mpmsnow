@@ -11,7 +11,7 @@ FIND_PACKAGE ( OpenGL REQUIRED )
 FIND_PACKAGE ( GLUT REQUIRED )
 
 IF ( NOT WIN32 )
-  ADD_DEFINITIONS ( -fPIC )
+  ADD_DEFINITIONS ( -fPIC -DOPENVDB_ENABLED )
 ENDIF ()
 
 INCLUDE_DIRECTORIES ( include )
@@ -74,3 +74,14 @@ TARGET_LINK_LIBRARIES ( unittest
   ${OPENGL_gl_LIBRARY}
   ${OPENGL_glu_LIBRARY}
   )
+
+HDK_ADD_LIBRARY ( SOP_MPMSim
+  src/houdiniPlugin/HoudiniSolveTermination.cpp
+  src/houdiniPlugin/SOP_MPMSim.cpp
+  src/houdiniPlugin/VDBCollisionObject.cpp
+  )
+
+TARGET_LINK_LIBRARIES ( SOP_MPMSim
+  mpmsim
+  )
+

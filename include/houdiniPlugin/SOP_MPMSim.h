@@ -51,8 +51,8 @@ private:
 	OP_ERROR initSim(OP_Context &context);
 
 	MpmSim::CubicBsplineShapeFunction m_shapeFunction;
-	MpmSim::Sim::CollisionObjectSet m_collisionObjects;
-	MpmSim::Sim::ForceFieldSet m_forceFields;
+	MpmSim::CollisionObject::CollisionObjectSet m_collisionObjects;
+	MpmSim::ForceField::ForceFieldSet m_forceFields;
 
 	std::auto_ptr<MpmSim::SnowConstitutiveModel> m_snowModel;
 	std::auto_ptr<MpmSim::Sim> m_sim;

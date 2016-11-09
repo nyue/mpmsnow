@@ -55,7 +55,7 @@ class Grid::GridSplatter
 	private:
 
 		const ParticlesInVoxelList* m_partition;
-		mutable Eigen::VectorXf& m_result;
+		Eigen::VectorXf& m_result;
 		const void* m_args;
 
 };

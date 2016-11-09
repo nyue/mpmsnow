@@ -162,8 +162,8 @@ SOP_MPMSim::initSim(OP_Context &context)
 				tensileStrength( startTime )
 		) );
 
-		m_forceFields = MpmSim::Sim::ForceFieldSet();
-		m_forceFields.fields.push_back( new MpmSim::GravityField( Eigen::Vector3f( 0,-9.8f,0 ) ) );
+		m_forceFields = MpmSim::ForceField::ForceFieldSet();
+		m_forceFields.add( new MpmSim::GravityField( Eigen::Vector3f( 0,-9.8f,0 ) ) );
 		
 		float h = gridSize( context.getTime() ) / 2;
 		UT_BoundingBox bbox;
@@ -203,8 +203,8 @@ SOP_MPMSim::initSim(OP_Context &context)
 		if( vVdb )
 		{
 			
-			const std::vector<Eigen::Vector3f>& x = m_sim->particleData.variable<Eigen::Vector3f>( "p" );
-			std::vector<Eigen::Vector3f>& v = m_sim->particleData.variable<Eigen::Vector3f>( "v" );
+			const std::vector<Eigen::Vector3f>& x = m_sim->particleData().variable<Eigen::Vector3f>( "p" );
+			std::vector<Eigen::Vector3f>& v = m_sim->particleData().variable<Eigen::Vector3f>( "v" );
 			for( size_t i=0; i < x.size(); ++i )
 			{
 				UT_Vector3D vdbValue = vVdb->getValueV3( UT_Vector3( x[i][0], x[i][1], x[i][2] ) );
@@ -296,7 +296,7 @@ SOP_MPMSim::cookMySop(OP_Context &context)
 			float dt = float(t - m_prevCookTime) / steps;
 			float h = (float)gridSize(t);
 			
-			m_collisionObjects = MpmSim::Sim::CollisionObjectSet();
+			m_collisionObjects = MpmSim::CollisionObject::CollisionObjectSet();
 			
 			for( size_t i=1; ; ++i )
 			{
@@ -316,23 +316,23 @@ SOP_MPMSim::cookMySop(OP_Context &context)
 					opError(OP_BAD_OPINPUT_READ, "Couldn't find VDB for collision SDF!");
 					boss->opEnd();
 					unlockInputs();
-					gdp->notifyCache(GU_CACHE_ALL);
+					// gdp->notifyCache(GU_CACHE_ALL);
 					return error();
 				}
 				
 				if( vVdb )
 				{
 					std::cerr << "found collision vdb with velocity" << std::endl;
-					m_collisionObjects.objects.push_back( new MpmSimHoudini::VDBCollisionObject( pVdb, vVdb ) );
+					m_collisionObjects.add( new MpmSimHoudini::VDBCollisionObject( pVdb, vVdb ) );
 				}
 				else
 				{
-					m_collisionObjects.objects.push_back( new MpmSimHoudini::VDBCollisionObject( pVdb ) );
+					m_collisionObjects.add( new MpmSimHoudini::VDBCollisionObject( pVdb ) );
 					std::cerr << "found static collision vdb" << std::endl;
 				}
 			}
 
-			std::cerr << m_collisionObjects.objects.size() << " vdb collisions!" << std::endl;
+			std::cerr << m_collisionObjects.numObjects() << " vdb collisions!" << std::endl;
 			
 			for( int i=0; i < steps; ++i )
 			{
@@ -355,7 +355,7 @@ SOP_MPMSim::cookMySop(OP_Context &context)
 		}
 	}
 
-	const std::vector<Eigen::Vector3f>& x = m_sim->particleData.variable<Eigen::Vector3f>( "p" );
+	const std::vector<Eigen::Vector3f>& x = m_sim->particleData().variable<Eigen::Vector3f>( "p" );
 	
 	std::cerr << "create " << x.size() << " particles" << std::endl;
 	
@@ -367,6 +367,6 @@ SOP_MPMSim::cookMySop(OP_Context &context)
 	
 	m_prevCookTime = t;
 	unlockInputs();
-	gdp->notifyCache(GU_CACHE_ALL);
+	// gdp->notifyCache(GU_CACHE_ALL);
 	return error();
 }
