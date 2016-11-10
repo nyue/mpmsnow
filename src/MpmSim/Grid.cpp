@@ -354,6 +354,9 @@ void Grid::voxelSort(
 
 void Grid::computeProcessingPartitions()
 {
+	if (m_particleInds.empty())
+		return;
+
 	const std::vector<Eigen::Vector3f>& particleX = m_d.variable<Vector3f>("p");
 	
 	// sort the spatial index so particles in the same voxel are adjacent:
